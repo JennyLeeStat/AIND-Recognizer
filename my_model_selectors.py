@@ -1,8 +1,10 @@
+import sys
 import math
 import statistics
 import warnings
 
 import numpy as np
+from collections import defaultdict
 from hmmlearn.hmm import GaussianHMM
 from sklearn.model_selection import KFold
 from asl_utils import combine_sequences
@@ -13,10 +15,15 @@ class ModelSelector(object):
     base class for model selection (strategy design pattern)
     '''
 
-    def __init__(self, all_word_sequences: dict, all_word_Xlengths: dict, this_word: str,
+    def __init__(self, all_word_sequences: dict,
+                 all_word_Xlengths: dict,
+                 this_word: str,
                  n_constant=3,
-                 min_n_components=2, max_n_components=10,
-                 random_state=14, verbose=False):
+                 min_n_components=2,
+                 max_n_components=10,
+                 random_state=14,
+                 verbose=False):
+
         self.words = all_word_sequences
         self.hwords = all_word_Xlengths
         self.sequences = all_word_sequences[this_word]
@@ -34,13 +41,17 @@ class ModelSelector(object):
     def base_model(self, num_states):
         # with warnings.catch_warnings():
         warnings.filterwarnings("ignore", category=DeprecationWarning)
-        # warnings.filterwarnings("ignore", category=RuntimeWarning)
+        warnings.filterwarnings("ignore", category=RuntimeWarning)
         try:
-            hmm_model = GaussianHMM(n_components=num_states, covariance_type="diag", n_iter=1000,
-                                    random_state=self.random_state, verbose=False).fit(self.X, self.lengths)
+            hmm_model = GaussianHMM(n_components=num_states,
+                                    covariance_type="diag",
+                                    n_iter=1000,
+                                    random_state=self.random_state,
+                                    verbose=False).fit(self.X, self.lengths)
             if self.verbose:
                 print("model created for {} with {} states".format(self.this_word, num_states))
             return hmm_model
+
         except:
             if self.verbose:
                 print("failure on {} with {} states".format(self.this_word, num_states))
@@ -77,7 +88,21 @@ class SelectorBIC(ModelSelector):
         warnings.filterwarnings("ignore", category=DeprecationWarning)
 
         # TODO implement model selection based on BIC scores
-        raise NotImplementedError
+        #raise NotImplementedError
+
+        min_bic = {'model': None, 'bic': sys.maxsize}
+        for p in range(self.min_n_components, self.max_n_components + 1):
+            model = self.base_model(p)
+            logL = model.score(self.X, self.lengths)
+            bic = -2 * logL + p * np.log(len(self.X))
+            if bic < min_bic['bic']:
+                min_bic['model'] = model
+                min_bic['bic'] = bic
+
+        return min_bic['model']
+
+
+
 
 
 class SelectorDIC(ModelSelector):
@@ -94,7 +119,17 @@ class SelectorDIC(ModelSelector):
         warnings.filterwarnings("ignore", category=DeprecationWarning)
 
         # TODO implement model selection based on DIC scores
-        raise NotImplementedError
+        #raise NotImplementedError
+        min_dic = {'model': None, 'dic': sys.maxsize}
+        for p in range(self.min_n_components, self.max_n_components + 1):
+            model = self.base_model(p)
+            logL = model.score(self.X, self.lengths)
+            dic = -2 * logL + p * np.log(len(self.X))
+            if dic < min_dic[ 'dic' ]:
+                min_dic[ 'model' ] = model
+                min_dic[ 'dic' ] = dic
+
+        return min_dic[ 'model' ]
 
 
 class SelectorCV(ModelSelector):

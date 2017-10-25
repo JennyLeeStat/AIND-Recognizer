@@ -24,7 +24,8 @@ class AslDb(object):
                  hands_fn=os.path.join('data', 'hands_condensed.csv'),
                  speakers_fn=os.path.join('data', 'speaker.csv'),
                  ):
-        """ loads ASL database from csv files with hand position information by frame, and speaker information
+        """ loads ASL database from csv files with hand position information by frame, 
+        and speaker information
 
         :param hands_fn: str
             filename of hand position csv data with expected format:
@@ -281,6 +282,7 @@ def combine_sequences(sequences):
         num_frames = len(sequence)
         sequence_lengths.append(num_frames)
     return sequence_cat, sequence_lengths
+
 
 def create_hmmlearn_data(dict):
     seq_len_dict = {}
