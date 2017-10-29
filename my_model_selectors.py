@@ -1,10 +1,7 @@
 import sys
 import math
-import statistics
 import warnings
-
 import numpy as np
-from collections import defaultdict
 from hmmlearn.hmm import GaussianHMM
 from sklearn.model_selection import KFold
 from asl_utils import combine_sequences
@@ -50,11 +47,13 @@ class ModelSelector(object):
                                     verbose=False).fit(self.X, self.lengths)
             if self.verbose:
                 print("model created for {} with {} states".format(self.this_word, num_states))
+
             return hmm_model
 
         except:
             if self.verbose:
                 print("failure on {} with {} states".format(self.this_word, num_states))
+
             return None
 
 
@@ -65,7 +64,6 @@ class SelectorConstant(ModelSelector):
 
     def select(self):
         """ select based on n_constant value
-
         :return: GaussianHMM object
         """
         best_num_components = self.n_constant
@@ -91,15 +89,25 @@ class SelectorBIC(ModelSelector):
         #raise NotImplementedError
 
         min_bic = {'model': None, 'bic': sys.maxsize}
-        for p in range(self.min_n_components, self.max_n_components + 1):
-            model = self.base_model(p)
-            logL = model.score(self.X, self.lengths)
-            bic = -2 * logL + p * np.log(len(self.X))
-            if bic < min_bic['bic']:
-                min_bic['model'] = model
-                min_bic['bic'] = bic
 
-        return min_bic['model']
+        for n in range(self.min_n_components, self.max_n_components + 1):
+
+            try:
+                model = self.base_model(n)
+                logL = model.score(self.X, self.lengths)
+                p = n * n + 2 * n * len(self.X[ 0 ]) - 1
+                bic = -2 * logL + p * math.log(len(self.X))
+                if bic < min_bic['bic']:
+                    min_bic['model'] = model
+                    min_bic['bic'] = bic
+
+            except:
+                pass
+
+        return min_bic[ 'model' ]
+
+
+
 
 
 
@@ -115,21 +123,35 @@ class SelectorDIC(ModelSelector):
     DIC = log(P(X(i)) - 1/(M-1)SUM(log(P(X(all but i))
     '''
 
+
+
     def select(self):
         warnings.filterwarnings("ignore", category=DeprecationWarning)
 
-        # TODO implement model selection based on DIC scores
-        #raise NotImplementedError
-        min_dic = {'model': None, 'dic': sys.maxsize}
-        for p in range(self.min_n_components, self.max_n_components + 1):
-            model = self.base_model(p)
-            logL = model.score(self.X, self.lengths)
-            dic = -2 * logL + p * np.log(len(self.X))
-            if dic < min_dic[ 'dic' ]:
-                min_dic[ 'model' ] = model
-                min_dic[ 'dic' ] = dic
+        max_dic = {'model': None, 'dic': -sys.maxsize}
 
-        return min_dic[ 'model' ]
+        for n in range(self.min_n_components, self.max_n_components + 1):
+            try:
+                model = self.base_model(n)
+                logL = model.score(self.X, self.lengths)
+
+                anti_evidence = [ w for w in self.words if w != self.this_word ]
+                M = len(anti_evidence)
+                anti_evidence_logL = 0.
+                for word in anti_evidence:
+                    _x, _lengths = self.hwords[ word ]
+                    anti_evidence_logL += model.score(_x, _lengths)
+
+                dic = logL - anti_evidence_logL / (M - 1)
+
+                if dic > max_dic[ 'dic' ]:
+                    max_dic[ 'model' ] = model
+                    max_dic[ 'dic' ] = dic
+
+            except:
+                pass
+
+        return max_dic[ 'model' ]
 
 
 class SelectorCV(ModelSelector):
@@ -140,5 +162,36 @@ class SelectorCV(ModelSelector):
     def select(self):
         warnings.filterwarnings("ignore", category=DeprecationWarning)
 
-        # TODO implement model selection using CV
-        raise NotImplementedError
+        split_method = KFold(n_splits=min(3, len(self.lengths)))
+        best_model = None
+        max_logL = -sys.maxsize
+
+        for n in range(self.min_n_components, self.max_n_components + 1):
+            scores = [ ]
+            for cv_train_idx, cv_test_idx in split_method.split(self.sequences):
+                train_X, train_lengths = combine_sequences(cv_train_idx, self.sequences)
+                test_X, test_lengths = combine_sequences(cv_test_idx, self.sequences)
+
+                try:
+                    model = GaussianHMM(n_components=n,
+                                    covariance_type="diag",
+                                    n_iter=1000,
+                                    random_state= self.random_state,
+                                    verbose=False).fit(train_X, train_lengths)
+
+                    scores.append(model.score(test_X, test_lengths))
+
+                    if len(scores) > 1:
+                        mean_score = np.mean(scores)
+                        if mean_score > max_logL:
+                            max_logL = mean_score
+                            best_model = self.base_model(n)
+
+                except:
+                    pass
+
+        return  best_model
+
+
+
+
