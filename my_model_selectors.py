@@ -88,7 +88,7 @@ class SelectorBIC(ModelSelector):
         # TODO implement model selection based on BIC scores
         #raise NotImplementedError
 
-        min_bic = {'model': None, 'bic': sys.maxsize}
+        max_bic = {'model': None, 'bic': -sys.maxsize}
 
         for n in range(self.min_n_components, self.max_n_components + 1):
 
@@ -96,15 +96,16 @@ class SelectorBIC(ModelSelector):
                 model = self.base_model(n)
                 logL = model.score(self.X, self.lengths)
                 p = n * n + 2 * n * len(self.X[ 0 ]) - 1
-                bic = -2 * logL + p * math.log(len(self.X))
-                if bic < min_bic['bic']:
-                    min_bic['model'] = model
-                    min_bic['bic'] = bic
+                bic = 2 * logL - p * math.log(len(self.X))
+                print(bic)
+                if bic > max_bic['bic']:
+                    max_bic['model'] = model
+                    max_bic['bic'] = bic
 
             except:
                 pass
 
-        return min_bic[ 'model' ]
+        return max_bic[ 'model' ]
 
 
 
